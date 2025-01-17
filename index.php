@@ -6,7 +6,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 // Default language - Idioma por defecto
 define('TKZ_IDIOMA','ES');
 
-// Definir la versión (constant) que reemplazará <VERSION> en version_text
+// Definir la versión de la app que se muestra a pied e página [NO TOCAR, GRACIAS!] - CAMBIAR SI HAY FORK?
 define('TKZ_GASTOS_VERSION', '1.0');
 
 
