@@ -1,0 +1,21 @@
+{
+  "title": "Expenses and Income Control",
+  "alert_no_data": "No data found in {xlsx} or {odf}.",
+  "label_since": "From:",
+  "label_until": "To:",
+  "btn_filter": "Filter",
+  "label_saldo_inicial": "Initial Balance",
+  "label_total_ingresos": "Total Incomes of the Period",
+  "label_total_gastos": "Total Expenses of the Period",
+  "label_saldo_final": "Final Balance",
+  "label_movimientos_periodo": "Period Movements",
+  "label_no_movimientos": "No movements in this period.",
+  "label_ingreso": "Income",
+  "label_gasto": "Expense",
+  "label_yaxis": "Amount",
+  "label_ingresos": "Incomes",
+  "label_gastos": "Expenses",
+  "label_saldo_acumulado": "Accumulated Balance",
+  "repo_text": "View on GitHub",
+  "version_text": "TKZ Gastos <version>"
+}

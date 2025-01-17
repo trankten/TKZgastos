@@ -1,0 +1,11 @@
+{
+    "name": "trankten/gastos",
+    "require": {
+        "phpoffice/phpspreadsheet": "^3.8"
+    },
+    "authors": [
+        {
+            "name": "Trantken"
+        }
+    ]
+}
