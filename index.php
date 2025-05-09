@@ -3,11 +3,8 @@ require __DIR__ . '/vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
-// Default language - Idioma por defecto
 define('TKZ_IDIOMA','ES');
-
-// Definir la versión de la app que se muestra a pied e página [NO TOCAR, GRACIAS!] - CAMBIAR SI HAY FORK?
-define('TKZ_GASTOS_VERSION', '1.0');
+define('TKZ_GASTOS_VERSION', '1.2');
 
 
 function detectarLocaleNavegador($idiomaDefecto=TKZ_IDIOMA) {
@@ -46,7 +43,7 @@ function cargarIdioma($locale) {
 }
 
 function cargarDatos() {
-    $excelPath = 'gastos.xlsx';
+    $excelPath = 'tkzdata.xlsx';
     $odfPath = 'gastos.odf';
     $filePath = null;
     if (file_exists($excelPath)) {
@@ -216,15 +213,22 @@ if ($startObj > $endObj) {
 $fechaInicio = $startObj->format('Y-m-d');
 $fechaFin = $endObj->format('Y-m-d');
 
-if (isset($_GET['nav']) && $_GET['nav'] === 'prev') {
-    $startObj->modify('-1 month');
-    $endObj->modify('-1 month');
-    $fechaInicio = $startObj->format('Y-m-d');
-    $fechaFin = $endObj->format('Y-m-d');
-}
-if (isset($_GET['nav']) && $_GET['nav'] === 'next') {
-    $startObj->modify('+1 month');
-    $endObj->modify('+1 month');
+if (isset($_GET['nav']) && in_array($_GET['nav'], ['prev','next'])) {
+    $offset = $_GET['nav'] === 'prev' ? -1 : 1;
+    $startObj->modify("{$offset} month");
+    $targetYear = $startObj->format('Y');
+    $targetMonth = $startObj->format('m');
+    $hoy = new DateTime();
+    if ($targetYear < $hoy->format('Y') || ($targetYear == $hoy->format('Y') && $targetMonth < $hoy->format('m'))) {
+        $startObj = new DateTime("{$targetYear}-{$targetMonth}-01");
+        $endObj = (new DateTime("{$targetYear}-{$targetMonth}-01"))->modify('last day of this month');
+    } elseif ($targetYear == $hoy->format('Y') && $targetMonth == $hoy->format('m')) {
+        $startObj = new DateTime("{$targetYear}-{$targetMonth}-01");
+        $endObj = clone $hoy;
+    } else {
+        $startObj = new DateTime("{$targetYear}-{$targetMonth}-01");
+        $endObj = (new DateTime("{$targetYear}-{$targetMonth}-01"))->modify('last day of this month');
+    }
     $fechaInicio = $startObj->format('Y-m-d');
     $fechaFin = $endObj->format('Y-m-d');
 }
@@ -260,18 +264,20 @@ foreach ($movimientosPeriodo as $row) {
     }
 }
 
-$fechas = array_keys($historico);
-sort($fechas);
 $labels = [];
 $ingresosArray = [];
 $gastosArray = [];
 $saldoArray = [];
 $saldoAcumulado = $saldoInicial;
 
-foreach ($fechas as $dia) {
+$periodEnd = (clone $endObj)->modify('+1 day');
+$period = new DatePeriod(clone $startObj, new DateInterval('P1D'), $periodEnd);
+
+foreach ($period as $date) {
+    $dia = $date->format('Y-m-d');
     $labels[] = $dia;
-    $ing = $historico[$dia]['ingresos'];
-    $gas = $historico[$dia]['gastos'];
+    $ing = isset($historico[$dia]) ? $historico[$dia]['ingresos'] : 0.0;
+    $gas = isset($historico[$dia]) ? $historico[$dia]['gastos'] : 0.0;
     $saldoAcumulado += ($ing - $gas);
     $ingresosArray[] = $ing;
     $gastosArray[] = $gas;
