@@ -3,8 +3,11 @@ require __DIR__ . '/vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
+// Default language - Idioma por defecto
 define('TKZ_IDIOMA','ES');
-define('TKZ_GASTOS_VERSION', '1.2');
+
+// Pos aqui va la version del TKZ Gastos
+define('TKZ_GASTOS_VERSION', '1.5');
 
 
 function detectarLocaleNavegador($idiomaDefecto=TKZ_IDIOMA) {
@@ -43,7 +46,7 @@ function cargarIdioma($locale) {
 }
 
 function cargarDatos() {
-    $excelPath = 'tkzdata.xlsx';
+    $excelPath = 'gastos.xlsx';
     $odfPath = 'gastos.odf';
     $filePath = null;
     if (file_exists($excelPath)) {
@@ -58,9 +61,10 @@ function cargarDatos() {
     $highestRow = $sheet->getHighestRow();
     $data = [];
     for ($row = 2; $row <= $highestRow; $row++) {
-        $fechaCell = $sheet->getCell("A{$row}")->getValue();
-        $conceptoCell = $sheet->getCell("B{$row}")->getValue();
-        $montoCell = $sheet->getCell("C{$row}")->getValue();
+        $fechaCell   = $sheet->getCell("A{$row}")->getValue();
+        $conceptoCell= $sheet->getCell("B{$row}")->getValue();
+        $montoCell   = $sheet->getCell("C{$row}")->getValue();
+        $notaCell    = $sheet->getCell("F{$row}")->getValue();              // nueva columna F
         if (empty($fechaCell) && empty($conceptoCell) && empty($montoCell)) {
             continue;
         }
@@ -82,15 +86,16 @@ function cargarDatos() {
             }
         }
         $monto = (float)$montoCell;
-        $tipo = $monto < 0 ? 'gasto' : 'ingreso';
+        $tipo  = $monto < 0 ? 'gasto' : 'ingreso';
         $monto = abs($monto);
         $fecha_display = (new DateTime($fechaISO))->format('d-m-Y');
         $data[] = [
-            'fechaISO' => $fechaISO,
-            'fecha_display' => $fecha_display,
-            'concepto' => trim($conceptoCell),
-            'tipo' => $tipo,
-            'monto' => $monto
+            'fechaISO'       => $fechaISO,
+            'fecha_display'  => $fecha_display,
+            'concepto'       => trim($conceptoCell),
+            'nota'           => trim($notaCell),                 // incluir nota
+            'tipo'           => $tipo,
+            'monto'          => $monto
         ];
     }
     usort($data, function($a, $b){
@@ -121,7 +126,7 @@ function obtenerSaldoAnteriorAFecha($datos, $fechaInicio) {
 function filtrarPorRangoFechas($datos, $fechaInicio, $fechaFin) {
     $resultado = [];
     $start = DateTime::createFromFormat('Y-m-d', $fechaInicio);
-    $end = DateTime::createFromFormat('Y-m-d', $fechaFin);
+    $end   = DateTime::createFromFormat('Y-m-d', $fechaFin);
     if (!$start || !$end) {
         return $resultado;
     }
@@ -135,8 +140,8 @@ function filtrarPorRangoFechas($datos, $fechaInicio, $fechaFin) {
 }
 
 $localesDisponibles = listarLocalesDisponibles();
-$localeBrowser = detectarLocaleNavegador();
-$localeSel = isset($_GET['locale']) ? strtoupper($_GET['locale']) : $localeBrowser;
+$localeBrowser      = detectarLocaleNavegador();
+$localeSel          = isset($_GET['locale']) ? strtoupper($_GET['locale']) : $localeBrowser;
 if (!in_array($localeSel, $localesDisponibles)) {
     $localeSel = 'ES';
 }
@@ -153,23 +158,30 @@ if (empty($datos)) {
       <title><?php echo isset($lang['title'])?$lang['title']:'Control de Gastos e Ingresos'; ?></title>
       <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
       <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+      <link rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css">
       <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+      <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+      <script src="https://cdn.datatables.net/plug-ins/1.10.24/sorting/date-eu.js"></script>
+      <script src="https://cdn.datatables.net/plug-ins/1.10.24/sorting/num-html.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
-        body{padding-top:20px;padding-bottom:20px;} .container{max-width:1100px;} .chart-container{position:relative;height:400px;width:100%;margin-top:20px;margin-bottom:20px;}
+        body{padding-top:20px;padding-bottom:20px;} 
+        .container{max-width:1100px;} 
+        .chart-container{position:relative;height:400px;width:100%;margin-top:20px;margin-bottom:20px;}
+        .nota { font-size: 0.8em; color: #666; }
       </style>
     </head>
     <body>
     <div class="container">
       <h1 class="text-center">
-        <?php echo isset($lang['title_html']) ? $lang['title_html'] : (isset($lang['title']) ? $lang['title'] : 'Control de Gastos e Ingresos'); ?>
+        <?php echo isset($lang['title_html'])? $lang['title_html']:(isset($lang['title'])?$lang['title']:'Control de Gastos e Ingresos'); ?>
       </h1>
       <div class="alert alert-warning" role="alert">
         <?php
         echo isset($lang['alert_no_data'])
-          ? str_replace(['{xlsx}','{odf}'],['gastos.xlsx','gastos.odf'],$lang['alert_no_data'])
+          ? str_replace(['{xlsx}','{odf}'], ['gastos.xlsx','gastos.odf'], $lang['alert_no_data'])
           : 'No se han encontrado datos en gastos.xlsx ni en gastos.odf.';
         ?>
       </div>
@@ -177,10 +189,11 @@ if (empty($datos)) {
     <footer class="text-center mt-4">
       <a href="https://github.com/trankten/tkzgastos" target="_blank">
         <?php echo isset($lang['repo_text'])?$lang['repo_text']:'Ver en GitHub'; ?>
-      </a>
-      -
+      </a> -
       <?php
-      $versionText = isset($lang['version_text']) ? str_replace('<VERSION>', TKZ_GASTOS_VERSION, $lang['version_text']) : ('TKZ Gastos '.TKZ_GASTOS_VERSION);
+      $versionText = isset($lang['version_text'])
+        ? str_replace('<VERSION>', TKZ_GASTOS_VERSION, $lang['version_text'])
+        : ('TKZ Gastos '.TKZ_GASTOS_VERSION);
       echo $versionText;
       ?>
     </footer>
@@ -193,51 +206,50 @@ if (empty($datos)) {
 $primeraFecha = $datos[0]['fechaISO'];
 $ultimaFecha = $datos[count($datos)-1]['fechaISO'];
 $fechaInicio = isset($_GET['fecha_inicio']) ? $_GET['fecha_inicio'] : date('Y-m-01');
-$fechaFin = isset($_GET['fecha_fin']) ? $_GET['fecha_fin'] : $ultimaFecha;
+$fechaFin    = isset($_GET['fecha_fin'])    ? $_GET['fecha_fin']    : $ultimaFecha;
 
 $startObj = DateTime::createFromFormat('Y-m-d', $fechaInicio);
-$endObj = DateTime::createFromFormat('Y-m-d', $fechaFin);
+$endObj   = DateTime::createFromFormat('Y-m-d', $fechaFin);
 
-if (!$startObj) {
-    $startObj = new DateTime($primeraFecha);
-}
-if (!$endObj) {
-    $endObj = new DateTime($ultimaFecha);
-}
+if (!$startObj) { $startObj = new DateTime($primeraFecha); }
+if (!$endObj)   { $endObj   = new DateTime($ultimaFecha); }
 if ($startObj > $endObj) {
-    $temp = $startObj;
+    $temp     = $startObj;
     $startObj = $endObj;
-    $endObj = $temp;
+    $endObj   = $temp;
 }
 
 $fechaInicio = $startObj->format('Y-m-d');
-$fechaFin = $endObj->format('Y-m-d');
+$fechaFin    = $endObj->format('Y-m-d');
 
+// Navegación mes anterior/mes siguiente con rangos automáticos
 if (isset($_GET['nav']) && in_array($_GET['nav'], ['prev','next'])) {
-    $offset = $_GET['nav'] === 'prev' ? -1 : 1;
+    $offset      = $_GET['nav'] === 'prev' ? -1 : 1;
     $startObj->modify("{$offset} month");
-    $targetYear = $startObj->format('Y');
-    $targetMonth = $startObj->format('m');
-    $hoy = new DateTime();
-    if ($targetYear < $hoy->format('Y') || ($targetYear == $hoy->format('Y') && $targetMonth < $hoy->format('m'))) {
-        $startObj = new DateTime("{$targetYear}-{$targetMonth}-01");
-        $endObj = (new DateTime("{$targetYear}-{$targetMonth}-01"))->modify('last day of this month');
-    } elseif ($targetYear == $hoy->format('Y') && $targetMonth == $hoy->format('m')) {
-        $startObj = new DateTime("{$targetYear}-{$targetMonth}-01");
-        $endObj = clone $hoy;
+    $year  = $startObj->format('Y');
+    $month = $startObj->format('m');
+    $hoy   = new DateTime();
+    if ($year < $hoy->format('Y') || ($year == $hoy->format('Y') && $month < $hoy->format('m'))) {
+        $startObj = new DateTime("{$year}-{$month}-01");
+        $endObj   = (new DateTime("{$year}-{$month}-01"))->modify('last day of this month');
+    } elseif ($year == $hoy->format('Y') && $month == $hoy->format('m')) {
+        $startObj = new DateTime("{$year}-{$month}-01");
+        $endObj   = clone $hoy;
     } else {
-        $startObj = new DateTime("{$targetYear}-{$targetMonth}-01");
-        $endObj = (new DateTime("{$targetYear}-{$targetMonth}-01"))->modify('last day of this month');
+        $startObj = new DateTime("{$year}-{$month}-01");
+        $endObj   = (new DateTime("{$year}-{$month}-01"))->modify('last day of this month');
     }
     $fechaInicio = $startObj->format('Y-m-d');
-    $fechaFin = $endObj->format('Y-m-d');
+    $fechaFin    = $endObj->format('Y-m-d');
 }
 
-$movimientosPeriodo = filtrarPorRangoFechas($datos, $fechaInicio, $fechaFin);
+// TODOS los datos completos para el popup y DataTable
+$movimientosCompletos = $datos;
+$movimientosPeriodo   = filtrarPorRangoFechas($datos, $fechaInicio, $fechaFin);
+
 $saldoInicial = obtenerSaldoAnteriorAFecha($datos, $fechaInicio);
 $totalIngresosPeriodo = 0.0;
-$totalGastosPeriodo = 0.0;
-
+$totalGastosPeriodo   = 0.0;
 foreach ($movimientosPeriodo as $m) {
     if ($m['tipo'] === 'ingreso') {
         $totalIngresosPeriodo += $m['monto'];
@@ -245,221 +257,184 @@ foreach ($movimientosPeriodo as $m) {
         $totalGastosPeriodo += $m['monto'];
     }
 }
-
 $saldoFinal = $saldoInicial + ($totalIngresosPeriodo - $totalGastosPeriodo);
 
+// Construir histórico diario
 $historico = [];
 foreach ($movimientosPeriodo as $row) {
-    $dia = date('Y-m-d', strtotime($row['fechaISO']));
+    $dia = $row['fechaISO'];
     if (!isset($historico[$dia])) {
-        $historico[$dia] = [
-            'ingresos' => 0.0,
-            'gastos' => 0.0
-        ];
+        $historico[$dia] = ['ingresos'=>0.0,'gastos'=>0.0];
     }
-    if ($row['tipo'] === 'ingreso') {
+    if ($row['tipo']==='ingreso') {
         $historico[$dia]['ingresos'] += $row['monto'];
     } else {
-        $historico[$dia]['gastos'] += $row['monto'];
+        $historico[$dia]['gastos']   += $row['monto'];
     }
 }
 
-$labels = [];
-$ingresosArray = [];
-$gastosArray = [];
-$saldoArray = [];
+$labels         = [];
+$ingresosArray  = [];
+$gastosArray    = [];
+$saldoArray     = [];
 $saldoAcumulado = $saldoInicial;
-
-$periodEnd = (clone $endObj)->modify('+1 day');
-$period = new DatePeriod(clone $startObj, new DateInterval('P1D'), $periodEnd);
-
+$periodEnd      = (clone $endObj)->modify('+1 day');
+$period         = new DatePeriod(clone $startObj, new DateInterval('P1D'), $periodEnd);
 foreach ($period as $date) {
-    $dia = $date->format('Y-m-d');
-    $labels[] = $dia;
-    $ing = isset($historico[$dia]) ? $historico[$dia]['ingresos'] : 0.0;
-    $gas = isset($historico[$dia]) ? $historico[$dia]['gastos'] : 0.0;
-    $saldoAcumulado += ($ing - $gas);
+    $d             = $date->format('Y-m-d');
+    $labels[]      = $d;
+    $ing           = $historico[$d]['ingresos'] ?? 0.0;
+    $gas           = $historico[$d]['gastos']   ?? 0.0;
+    $saldoAcumulado+= ($ing - $gas);
     $ingresosArray[] = $ing;
-    $gastosArray[] = $gas;
-    $saldoArray[] = $saldoAcumulado;
+    $gastosArray[]   = $gas;
+    $saldoArray[]    = $saldoAcumulado;
 }
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>
-    <?php echo isset($lang['title_html'])
-      ? $lang['title_html']
-      : (isset($lang['title']) ? $lang['title'] : 'Control de Gastos e Ingresos');
-    ?>
-  </title>
+  <title><?php echo isset($lang['title_html'])? $lang['title_html']:(isset($lang['title'])?$lang['title']:'Control de Gastos e Ingresos'); ?></title>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-  <script src="https://stackpath.bootstrapcdN.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <link  rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link  rel="stylesheet" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.min.css">
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/plug-ins/1.10.24/sorting/date-eu.js"></script>
+  <script src="https://cdn.datatables.net/plug-ins/1.10.24/sorting/num-html.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link  rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body{padding-top:20px;padding-bottom:20px;}
     .container{max-width:1100px;}
     .chart-container{position:relative;height:400px;width:100%;margin-top:20px;margin-bottom:20px;}
+    .nota { font-size:0.8em; color:#666; }
   </style>
 </head>
 <body>
 <div class="container">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-      <h1>
-        <?php echo isset($lang['title_html'])
-          ? $lang['title_html']
-          : (isset($lang['title']) ? $lang['title'] : 'Control de Gastos e Ingresos');
-        ?>
-      </h1>
-    </div>
-    <div>
-      <select id="langSelector" class="form-control">
-        <?php foreach($localesDisponibles as $l) { ?>
-          <option value="<?php echo $l; ?>" <?php if($l === $localeSel) echo 'selected'; ?>>
-            <?php echo $l; ?>
-          </option>
-        <?php } ?>
-      </select>
-    </div>
+    <h1><?php echo isset($lang['title_html'])? $lang['title_html']:(isset($lang['title'])?$lang['title']:'Control de Gastos e Ingresos'); ?></h1>
+    <select id="langSelector" class="form-control w-auto">
+      <?php foreach($localesDisponibles as $l): ?>
+        <option value="<?php echo $l;?>" <?php if($l===$localeSel) echo 'selected';?>><?php echo $l;?></option>
+      <?php endforeach;?>
+    </select>
   </div>
   <form method="get" class="form-inline mb-3">
-    <input type="hidden" name="locale" value="<?php echo htmlspecialchars($localeSel); ?>">
+    <input type="hidden" name="locale" value="<?php echo htmlspecialchars($localeSel);?>">
     <div class="form-group mr-2">
-      <label for="fecha_inicio" class="mr-2">
-        <?php echo isset($lang['label_since'])?$lang['label_since']:'Desde:'; ?>
-      </label>
-      <input type="date" name="fecha_inicio" id="fecha_inicio" class="form-control"
-             value="<?php echo htmlspecialchars($fechaInicio); ?>">
+      <label for="fecha_inicio" class="mr-2"><?php echo $lang['label_since']??'Desde:';?></label>
+      <input type="date" name="fecha_inicio" id="fecha_inicio" class="form-control" value="<?php echo $fechaInicio;?>">
     </div>
     <div class="form-group mr-2">
-      <label for="fecha_fin" class="mr-2">
-        <?php echo isset($lang['label_until'])?$lang['label_until']:'Hasta:'; ?>
-      </label>
-      <input type="date" name="fecha_fin" id="fecha_fin" class="form-control"
-             value="<?php echo htmlspecialchars($fechaFin); ?>">
+      <label for="fecha_fin" class="mr-2"><?php echo $lang['label_until']??'Hasta:';?></label>
+      <input type="date" name="fecha_fin" id="fecha_fin" class="form-control" value="<?php echo $fechaFin;?>">
     </div>
-    <button type="submit" class="btn btn-primary">
-      <?php echo isset($lang['btn_filter']) ? $lang['btn_filter'] : 'Filtrar'; ?>
-    </button>
-    <button type="submit" name="nav" value="prev" class="btn btn-secondary ml-2">
-      <?php echo isset($lang['btn_prev_month'])?$lang['btn_prev_month']:'Mes Anterior'; ?>
-    </button>
-    <button type="submit" name="nav" value="next" class="btn btn-secondary ml-2">
-      <?php echo isset($lang['btn_next_month'])?$lang['btn_next_month']:'Mes Siguiente'; ?>
-    </button>
+    <button type="submit" class="btn btn-primary"><?php echo $lang['btn_filter']??'Filtrar';?></button>
+    <button type="submit" name="nav" value="prev" class="btn btn-secondary ml-2"><?php echo $lang['btn_prev_month']??'Mes Anterior';?></button>
+    <button type="submit" name="nav" value="next" class="btn btn-secondary ml-2"><?php echo $lang['btn_next_month']??'Mes Siguiente';?></button>
   </form>
+
   <div class="row mb-3">
-    <div class="col">
-      <div class="card">
-        <div class="card-header">
-          <?php echo isset($lang['label_saldo_inicial'])?$lang['label_saldo_inicial']:'Saldo Inicial'; ?>
-          (<?php echo date('d-m-Y', strtotime($fechaInicio)); ?>)
-        </div>
-        <div class="card-body">
-          <h3><?php echo number_format($saldoInicial,2); ?> €</h3>
-        </div>
-      </div>
-    </div>
-    <div class="col">
-      <div class="card">
-        <div class="card-header">
-          <?php echo isset($lang['label_total_ingresos'])?$lang['label_total_ingresos']:'Total Ingresos del Período'; ?>
-        </div>
-        <div class="card-body">
-          <h3 class="text-success"><?php echo number_format($totalIngresosPeriodo,2); ?> €</h3>
-        </div>
-      </div>
-    </div>
-    <div class="col">
-      <div class="card">
-        <div class="card-header">
-          <?php echo isset($lang['label_total_gastos'])?$lang['label_total_gastos']:'Total Gastos del Período'; ?>
-        </div>
-        <div class="card-body">
-          <h3 class="text-danger"><?php echo number_format($totalGastosPeriodo,2); ?> €</h3>
-        </div>
-      </div>
-    </div>
-    <div class="col">
-      <div class="card">
-        <div class="card-header">
-          <?php echo isset($lang['label_saldo_final'])?$lang['label_saldo_final']:'Saldo Final'; ?>
-          (<?php echo date('d-m-Y', strtotime($fechaFin)); ?>)
-        </div>
-        <div class="card-body">
-          <h3 class="text-info"><?php echo number_format($saldoFinal,2); ?> €</h3>
-        </div>
-      </div>
-    </div>
+    <div class="col"><div class="card">
+      <div class="card-header"><?php echo $lang['label_saldo_inicial']??'Saldo Inicial';?> (<?php echo date('d-m-Y',strtotime($fechaInicio));?>)</div>
+      <div class="card-body"><h3><?php echo number_format($saldoInicial,2);?> €</h3></div>
+    </div></div>
+    <div class="col"><div class="card">
+      <div class="card-header"><?php echo $lang['label_total_ingresos']??'Total Ingresos del Período';?></div>
+      <div class="card-body"><h3 class="text-success"><?php echo number_format($totalIngresosPeriodo,2);?> €</h3></div>
+    </div></div>
+    <div class="col"><div class="card">
+      <div class="card-header"><?php echo $lang['label_total_gastos']??'Total Gastos del Período';?></div>
+      <div class="card-body"><h3 class="text-danger"><?php echo number_format($totalGastosPeriodo,2);?> €</h3></div>
+    </div></div>
+    <div class="col"><div class="card">
+      <div class="card-header"><?php echo $lang['label_saldo_final']??'Saldo Final';?> (<?php echo date('d-m-Y',strtotime($fechaFin));?>)</div>
+      <div class="card-body"><h3 class="text-info"><?php echo number_format($saldoFinal,2);?> €</h3></div>
+    </div></div>
   </div>
-  <h4>
-    <?php echo isset($lang['label_movimientos_periodo'])?$lang['label_movimientos_periodo']:'Movimientos del período'; ?>
-    <?php echo date('d-m-Y', strtotime($fechaInicio)); ?> - <?php echo date('d-m-Y', strtotime($fechaFin)); ?>
-  </h4>
-  <table class="table table-bordered table-hover">
+
+  <h4><?php echo $lang['label_movimientos_periodo']??'Movimientos del período';?> <?php echo date('d-m-Y',strtotime($fechaInicio));?> - <?php echo date('d-m-Y',strtotime($fechaFin));?></h4>
+
+  <table id="mainTable" class="table table-bordered table-hover">
     <thead class="thead-light">
       <tr>
-        <th><?php echo isset($lang['label_fecha'])?$lang['label_fecha']:'Fecha'; ?></th>
-        <th><?php echo isset($lang['label_concepto'])?$lang['label_concepto']:'Concepto'; ?></th>
-        <th><?php echo isset($lang['label_tipo'])?$lang['label_tipo']:'Tipo'; ?></th>
-        <th><?php echo isset($lang['label_yaxis'])?$lang['label_yaxis']:'Cantidad'; ?></th>
+        <th><?php echo $lang['label_fecha']??'Fecha';?></th>
+        <th><?php echo $lang['label_concepto']??'Concepto';?></th>
+        <th><?php echo $lang['label_tipo']??'Tipo';?></th>
+        <th><?php echo $lang['label_yaxis']??'Cantidad';?></th>
       </tr>
     </thead>
     <tbody>
-    <?php if(empty($movimientosPeriodo)): ?>
-      <tr>
-        <td colspan="4" class="text-center">
-          <?php echo isset($lang['label_no_movimientos'])?$lang['label_no_movimientos']:'No hay movimientos en este periodo.'; ?>
-        </td>
-      </tr>
-    <?php else: ?>
-      <?php usort($movimientosPeriodo,function($a,$b){return strtotime($b['fechaISO'])-strtotime($a['fechaISO']);}); ?>
-      <?php foreach($movimientosPeriodo as$m): ?>
-        <tr>
-          <td><?php echo htmlspecialchars($m['fecha_display']); ?></td>
-          <td><?php echo htmlspecialchars($m['concepto']); ?></td>
-          <td><?php echo $m['tipo']==='ingreso'
-            ? '<span class="text-success">'.(isset($lang['label_ingreso'])?$lang['label_ingreso']:'Ingreso').'</span>'
-            : '<span class="text-danger">'.(isset($lang['label_gasto'])?$lang['label_gasto']:'Gasto').'</span>'; ?>
-          </td>
-          <td>
-            <?php
-            $c=($m['tipo']==='ingreso')?'text-success':'text-danger';
-            echo "<span class='{$c}'>".number_format($m['monto'],2)." €</span>";
-            ?>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-    <?php endif; ?>
+      <?php if(empty($movimientosPeriodo)): ?>
+        <tr><td colspan="4" class="text-center"><?php echo $lang['label_no_movimientos']??'No hay movimientos en este periodo.';?></td></tr>
+      <?php else: ?>
+        <?php usort($movimientosPeriodo,function($a,$b){return strtotime($b['fechaISO'])-strtotime($a['fechaISO']);}); ?>
+        <?php foreach($movimientosPeriodo as $m): ?>
+          <tr>
+            <td><?php echo $m['fecha_display'];?></td>
+            <td>
+              <a href="#" class="concepto-link" data-concepto="<?php echo htmlspecialchars($m['concepto'],ENT_QUOTES);?>">
+                <?php echo htmlspecialchars($m['concepto']);?>
+              </a>
+              <?php if($m['nota']!==''):?>
+                <div class="nota"><?php echo htmlspecialchars($m['nota']);?></div>
+              <?php endif;?>
+            </td>
+            <td>
+              <?php echo $m['tipo']==='ingreso'
+                ? '<span class="text-success">'.$lang['label_ingreso']??'Ingreso'.'</span>'
+                : '<span class="text-danger">'.$lang['label_gasto']??'Gasto'.'</span>';?>
+            </td>
+            <td>
+              <?php
+              $c = $m['tipo']==='ingreso'?'text-success':'text-danger';
+              echo "<span class='{$c}'>".number_format($m['monto'],2)." €</span>";
+              ?>
+            </td>
+          </tr>
+        <?php endforeach;?>
+      <?php endif;?>
     </tbody>
   </table>
-  <div class="chart-container">
-    <canvas id="myChart"></canvas>
-  </div>
+
+  <div class="chart-container"><canvas id="myChart"></canvas></div>
 </div>
+
+<!-- Modal detalle concepto -->
+<div class="modal fade" id="conceptModal" tabindex="-1" aria-labelledby="conceptModalLabel" aria-hidden="true">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title" id="conceptModalLabel"></h5>
+      <button type="button" class="close" data-dismiss="modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <table id="conceptTable" class="table table-bordered table-hover">
+        <thead><tr><th>Fecha</th><th>Cantidad</th><th>Nota</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div></div>
+</div>
+
 <footer class="text-center mt-4">
   <a href="https://github.com/trankten/tkzgastos" target="_blank">
-    <?php echo isset($lang['repo_text'])?$lang['repo_text']:'Ver en GitHub'; ?>
-  </a>
-  -
-  <?php
-  $versionText = isset($lang['version_text'])
-    ? str_replace('<VERSION>', TKZ_GASTOS_VERSION, $lang['version_text'])
-    : ('TKZ Gastos '.TKZ_GASTOS_VERSION);
-  echo $versionText;
-  ?>
+    <?php echo $lang['repo_text'] ?? 'Ver en GitHub'; ?>
+  </a> -
+  <?php echo isset($lang['version_text'])
+    ? str_replace('<VERSION>',TKZ_GASTOS_VERSION,$lang['version_text'])
+    : 'TKZ Gastos '.TKZ_GASTOS_VERSION; ?>
 </footer>
+
 <script>
-var ctx=document.getElementById('myChart').getContext('2d');
-var myChart=new Chart(ctx,{
+var ctx = document.getElementById('myChart').getContext('2d');
+new Chart(ctx, {
   type:'line',
   data:{
-    labels:<?php echo json_encode($labels); ?>,
+    labels: <?php echo json_encode($labels);?>,
     datasets:[
       {
         label:'<?php echo isset($lang['label_ingresos'])?$lang['label_ingresos']:'Ingresos'; ?>',
@@ -487,16 +462,42 @@ var myChart=new Chart(ctx,{
       }
     ]
   },
-  options:{
-    responsive:true,
-    scales:{y:{beginAtZero:true}}
-  }
+  options:{responsive:true, scales:{y:{beginAtZero:true}}}
 });
-$('#langSelector').on('change',function(){
-  var sel=$(this).val();
-  var url=new URL(window.location.href);
-  url.searchParams.set('locale',sel);
-  window.location=url.toString();
+
+$('#langSelector').on('change', function(){
+  var u = new URL(location);
+  u.searchParams.set('locale', $(this).val());
+  location = u;
+});
+
+var todos = <?php echo json_encode($movimientosCompletos);?>;
+
+$(function(){
+
+  $('#conceptTable').DataTable({
+    language: { url: '//cdn.datatables.net/plug-ins/2.3.0/i18n/<?php echo strtolower($localeSel);?>-<?php echo strtoupper($localeSel);?>.json' },
+    order:[[0,'desc']],
+    columns:[{ type: 'date-eu', targets: 0 },{ type: 'num-html',  targets: 1 },{type:'string'}]
+  });
+
+  $('body').on('click','.concepto-link', function(e){
+    e.preventDefault();
+    var concepto = $(this).data('concepto'),
+        filtered = todos.filter(m=>m.concepto===concepto)
+                         .sort((a,b)=> new Date(b.fechaISO)-new Date(a.fechaISO)),
+        tbl = $('#conceptTable').DataTable();
+    tbl.clear();
+    filtered.forEach(m=>{
+      var pago = m.tipo==='ingreso'
+        ? '<span class="text-success">'+m.monto.toFixed(2)+' €</span>'
+        : '<span class="text-danger">'+m.monto.toFixed(2)+' €</span>';
+      tbl.row.add([m.fecha_display, pago, m.nota||'']);
+    });
+    tbl.draw();
+    $('#conceptModalLabel').text(concepto);
+    $('#conceptModal').modal('show');
+  });
 });
 </script>
 </body>
